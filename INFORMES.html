@@ -182,11 +182,6 @@
         const grupos = ['1A', '1B', '2A', '2B', '3A', '3B', '4A', '4B', '5A', '5B', '6A', '6B'];
         const container = document.getElementById('tables-container');
 
-        // Verificar y registrar NA para el día actual al cargar
-        function verificarAsistenciasDiaActual() {
-            const hoy = formatDateOnly(new Date());
-            grupos.forEach(grupo => {
-                const registros = JSON.parse(localStorage.getItem(`asistencias_${grupo}`)) || [];
                     }
                 });
             });
