@@ -1,0 +1,264 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generador de Códigos QR - CODIGE</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .imprimir-btn {
+            display: block;
+            margin: 20px auto;
+            padding: 10px 20px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .imprimir-btn:hover {
+            background-color: #218838;
+        }
+        .grupo-container {
+            margin-bottom: 20px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+        .grupo-header {
+            background-color: #007bff;
+            color: white;
+            padding: 15px;
+            cursor: pointer;
+            border-radius: 4px 4px 0 0;
+            font-size: 18px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .grupo-header:hover {
+            background-color: #0056b3;
+        }
+        .grupo-content {
+            display: none;
+            padding: 10px;
+            display: grid;
+            grid-template-columns: 1fr 1fr; /* 2 columnas */
+            gap: 2cm; /* Separación de 2cm entre columnas */
+        }
+        .grupo-content.active {
+            display: grid;
+        }
+        @media (max-width: 600px) {
+            .grupo-content {
+                grid-template-columns: 1fr; /* 1 columna en móvil */
+                gap: 1cm;
+            }
+        }
+        .registro-container {
+            width: 8cm;
+            height: 6cm;
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 6px; /* Padding más compacto */
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        .registro-info {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+        }
+        .registro-info h3 {
+            margin: 0 0 3px 0; /* Margen reducido */
+            color: #333;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .registro-info p {
+            margin: 1px 0;
+            font-size: 11px;
+            line-height: 1.2;
+        }
+        .qr-section {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex: 1;
+            margin-top: 2px; /* Margen reducido para equilibrar */
+        }
+        .qr-container {
+            width: 150px;
+            height: 150px;
+            flex-shrink: 0;
+        }
+        .no-registros {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+            font-style: italic;
+            grid-column: 1 / -1; /* Ocupa ambas columnas si no hay registros */
+        }
+        /* Optimizaciones para impresión */
+        @media print {
+            body {
+                background-color: white;
+                padding: 0;
+                margin: 0;
+            }
+            .grupo-container {
+                box-shadow: none;
+                margin-bottom: 0;
+                break-inside: avoid; /* Evita romper grupos en páginas */
+            }
+            .grupo-header {
+                background-color: #007bff !important;
+                -webkit-print-color-adjust: exact;
+            }
+            .registro-container {
+                box-shadow: none;
+                border: 1px solid #000;
+                margin-bottom: 0.5cm;
+            }
+            .imprimir-btn {
+                display: none;
+            }
+            .grupo-header {
+                cursor: default;
+            }
+            .grupo-content {
+                display: grid !important; /* Fuerza mostrar todo al imprimir */
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Generador de Códigos QR - CODIGE</h1>
+    <button class="imprimir-btn" onclick="window.print()">Imprimir Credenciales</button>
+    <p style="text-align: center; color: #666;">Cargando registros desde REGISTEL.HTML...</p>
+
+    <div id="grupos-container"></div>
+
+    <script>
+        const grupos = ['1A', '1B', '2A', '2B', '3A', '3B', '4A', '4B', '5A', '5B', '6A', '6B'];
+        const container = document.getElementById('grupos-container');
+
+        function generarQR(id, qrDiv) {
+            new QRCode(qrDiv, {
+                text: id,
+                width: 150,
+                height: 150,
+                colorDark: "#000000",
+                colorLight: "#ffffff",
+                correctLevel: QRCode.CorrectLevel.H
+            });
+        }
+
+        function crearGrupoHTML(grupo) {
+            const registros = JSON.parse(localStorage.getItem(`asistencias_${grupo}`)) || [];
+            const grupoDiv = document.createElement('div');
+            grupoDiv.className = 'grupo-container';
+            grupoDiv.innerHTML = `
+                <div class="grupo-header" onclick="toggleGrupo(this)">
+                    <span>Grupo ${grupo}</span>
+                    <span>${registros.length} registros</span>
+                </div>
+                <div class="grupo-content" id="content_${grupo}">
+                    ${registros.length === 0 ? '<p class="no-registros">Sin registros en este grupo.</p>' : ''}
+                </div>
+            `;
+            container.appendChild(grupoDiv);
+
+            if (registros.length > 0) {
+                const contentDiv = document.getElementById(`content_${grupo}`);
+                registros.forEach(registro => {
+                    const registroDiv = document.createElement('div');
+                    registroDiv.className = 'registro-container';
+                    registroDiv.innerHTML = `
+                        <div class="registro-info">
+                            <h3>${registro.alumno}</h3>
+                            <p><strong>Tutor:</strong> ${registro.tutor}</p>
+                            <p><strong>ID:</strong> ${registro.id}</p>
+                        </div>
+                        <div class="qr-section">
+                            <div class="qr-container" id="qr_${registro.id}"></div>
+                        </div>
+                    `;
+                    contentDiv.appendChild(registroDiv);
+
+                    // Generar QR
+                    const qrDiv = document.getElementById(`qr_${registro.id}`);
+                    generarQR(registro.id, qrDiv);
+                });
+            }
+        }
+
+        function toggleGrupo(header) {
+            const content = header.nextElementSibling;
+            content.classList.toggle('active');
+        }
+
+        // Cargar todos los grupos al iniciar
+        window.onload = function() {
+            grupos.forEach(grupo => crearGrupoHTML(grupo));
+            document.querySelector('p').style.display = 'none'; // Ocultar mensaje de carga
+        };
+    </script>
+</body>
+</html>

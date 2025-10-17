@@ -1,0 +1,810 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registro de Asistencia</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .form-container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: inline-block;
+            width: 120px;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="text"], select, input[type="file"] {
+            padding: 10px;
+            width: calc(100% - 140px);
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        input[readonly] {
+            background-color: #e9ecef;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #218838;
+        }
+        .error, .success {
+            font-size: 14px;
+            margin-top: 5px;
+            display: none;
+        }
+        .error {
+            color: red;
+        }
+        .success {
+            color: green;
+        }
+        .import-section {
+            margin-top: 15px;
+        }
+        .table-container {
+            margin-bottom: 20px;
+        }
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #007bff;
+            color: white;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 18px;
+            margin-bottom: 5px;
+        }
+        .table-header-title {
+            cursor: pointer;
+            flex-grow: 1;
+        }
+        .table-header-title:hover {
+            background-color: #0056b3;
+        }
+        .table-header button {
+            background-color: #ffc107;
+            color: #333;
+        }
+        .table-header button:hover {
+            background-color: #e0a800;
+        }
+        .table-header .cancel-btn {
+            background-color: #6c757d;
+        }
+        .table-header .cancel-btn:hover {
+            background-color: #5a6268;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: #fff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            display: none;
+        }
+        table.active {
+            display: table;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #007bff;
+            color: white;
+        }
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+        td.editable:hover {
+            background-color: #e9ecef;
+            cursor: pointer;
+        }
+        td input {
+            width: 100%;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .action-buttons button {
+            padding: 5px 10px;
+            font-size: 14px;
+            margin: 0 2px;
+        }
+        .delete-btn {
+            background-color: #dc3545;
+        }
+        .delete-btn:hover {
+            background-color: #c82333;
+        }
+        .move-btn {
+            background-color: #17a2b8;
+        }
+        .move-btn:hover {
+            background-color: #138496;
+        }
+    </style>
+</head>
+<body>
+    <h1>Registro de Asistencia</h1>
+    <div class="form-container">
+        <div class="form-group">
+            <label for="alumno">Alumno:</label>
+            <input type="text" id="alumno" placeholder="Nombre del alumno">
+        </div>
+        <div class="form-group">
+            <label for="tutor">Tutor:</label>
+            <input type="text" id="tutor" placeholder="Nombre del tutor" oninput="actualizarIDFormulario()">
+        </div>
+        <div class="form-group">
+            <label for="parentesco">Parentesco:</label>
+            <input type="text" id="parentesco" placeholder="Ej. Padre, Madre" oninput="actualizarIDFormulario()">
+        </div>
+        <div class="form-group">
+            <label for="id">ID:</label>
+            <input type="text" id="id" readonly>
+        </div>
+        <div class="form-group">
+            <label for="grupo">Grupo:</label>
+            <select id="grupo">
+                <option value="1A">1A</option>
+                <option value="1B">1B</option>
+                <option value="2A">2A</option>
+                <option value="2B">2B</option>
+                <option value="3A">3A</option>
+                <option value="3B">3B</option>
+                <option value="4A">4A</option>
+                <option value="4B">4B</option>
+                <option value="5A">5A</option>
+                <option value="5B">5B</option>
+                <option value="6A">6A</option>
+                <option value="6B">6B</option>
+            </select>
+        </div>
+        <button onclick="registrarAsistencia()">Registrar</button>
+        <p id="error-message" class="error">Por favor, completa todos los campos.</p>
+        <div class="import-section">
+            <label for="csvFile">Importar CSV:</label>
+            <input type="file" id="csvFile" accept=".csv">
+            <button onclick="importarCSV()">Importar CSV</button>
+            <p id="csv-success" class="success"></p>
+            <p id="csv-error" class="error"></p>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <div class="table-header">
+            <span class="table-header-title" onclick="toggleTable('tabla_1A')">Grupo 1A</span>
+            <button onclick="habilitarEdicion('1A')">Editar</button>
+            <button id="actualizar_1A" style="display: none;" onclick="actualizarRegistros('1A')">Actualizar</button>
+            <button id="cancelar_1A" class="cancel-btn" style="display: none;" onclick="cancelarEdicion('1A')">Cancelar</button>
+        </div>
+        <table id="tabla_1A">
+            <thead>
+                <tr>
+                    <th style="width: 100px;">Acciones</th>
+                    <th>Alumno</th>
+                    <th>Tutor</th>
+                    <th>Parentesco</th>
+                    <th>ID</th>
+                </tr>
+            </thead>
+            <tbody id="lista_1A"></tbody>
+        </table>
+    </div>
+    <div class="table-container">
+        <div class="table-header">
+            <span class="table-header-title" onclick="toggleTable('tabla_1B')">Grupo 1B</span>
+            <button onclick="habilitarEdicion('1B')">Editar</button>
+            <button id="actualizar_1B" style="display: none;" onclick="actualizarRegistros('1B')">Actualizar</button>
+            <button id="cancelar_1B" class="cancel-btn" style="display: none;" onclick="cancelarEdicion('1B')">Cancelar</button>
+        </div>
+        <table id="tabla_1B">
+            <thead>
+                <tr>
+                    <th style="width: 100px;">Acciones</th>
+                    <th>Alumno</th>
+                    <th>Tutor</th>
+                    <th>Parentesco</th>
+                    <th>ID</th>
+                </tr>
+            </thead>
+            <tbody id="lista_1B"></tbody>
+        </table>
+    </div>
+    <div class="table-container">
+        <div class="table-header">
+            <span class="table-header-title" onclick="toggleTable('tabla_2A')">Grupo 2A</span>
+            <button onclick="habilitarEdicion('2A')">Editar</button>
+            <button id="actualizar_2A" style="display: none;" onclick="actualizarRegistros('2A')">Actualizar</button>
+            <button id="cancelar_2A" class="cancel-btn" style="display: none;" onclick="cancelarEdicion('2A')">Cancelar</button>
+        </div>
+        <table id="tabla_2A">
+            <thead>
+                <tr>
+                    <th style="width: 100px;">Acciones</th>
+                    <th>Alumno</th>
+                    <th>Tutor</th>
+                    <th>Parentesco</th>
+                    <th>ID</th>
+                </tr>
+            </thead>
+            <tbody id="lista_2A"></tbody>
+        </table>
+    </div>
+    <div class="table-container">
+        <div class="table-header">
+            <span class="table-header-title" onclick="toggleTable('tabla_2B')">Grupo 2B</span>
+            <button onclick="habilitarEdicion('2B')">Editar</button>
+            <button id="actualizar_2B" style="display: none;" onclick="actualizarRegistros('2B')">Actualizar</button>
+            <button id="cancelar_2B" class="cancel-btn" style="display: none;" onclick="cancelarEdicion('2B')">Cancelar</button>
+        </div>
+        <table id="tabla_2B">
+            <thead>
+                <tr>
+                    <th style="width: 100px;">Acciones</th>
+                    <th>Alumno</th>
+                    <th>Tutor</th>
+                    <th>Parentesco</th>
+                    <th>ID</th>
+                </tr>
+            </thead>
+            <tbody id="lista_2B"></tbody>
+        </table>
+    </div>
+    <div class="table-container">
+        <div class="table-header">
+            <span class="table-header-title" onclick="toggleTable('tabla_3A')">Grupo 3A</span>
+            <button onclick="habilitarEdicion('3A')">Editar</button>
+            <button id="actualizar_3A" style="display: none;" onclick="actualizarRegistros('3A')">Actualizar</button>
+            <button id="cancelar_3A" class="cancel-btn" style="display: none;" onclick="cancelarEdicion('3A')">Cancelar</button>
+        </div>
+        <table id="tabla_3A">
+            <thead>
+                <tr>
+                    <th style="width: 100px;">Acciones</th>
+                    <th>Alumno</th>
+                    <th>Tutor</th>
+                    <th>Parentesco</th>
+                    <th>ID</th>
+                </tr>
+            </thead>
+            <tbody id="lista_3A"></tbody>
+        </table>
+    </div>
+    <div class="table-container">
+        <div class="table-header">
+            <span class="table-header-title" onclick="toggleTable('tabla_3B')">Grupo 3B</span>
+            <button onclick="habilitarEdicion('3B')">Editar</button>
+            <button id="actualizar_3B" style="display: none;" onclick="actualizarRegistros('3B')">Actualizar</button>
+            <button id="cancelar_3B" class="cancel-btn" style="display: none;" onclick="cancelarEdicion('3B')">Cancelar</button>
+        </div>
+        <table id="tabla_3B">
+            <thead>
+                <tr>
+                    <th style="width: 100px;">Acciones</th>
+                    <th>Alumno</th>
+                    <th>Tutor</th>
+                    <th>Parentesco</th>
+                    <th>ID</th>
+                </tr>
+            </thead>
+            <tbody id="lista_3B"></tbody>
+        </table>
+    </div>
+    <div class="table-container">
+        <div class="table-header">
+            <span class="table-header-title" onclick="toggleTable('tabla_4A')">Grupo 4A</span>
+            <button onclick="habilitarEdicion('4A')">Editar</button>
+            <button id="actualizar_4A" style="display: none;" onclick="actualizarRegistros('4A')">Actualizar</button>
+            <button id="cancelar_4A" class="cancel-btn" style="display: none;" onclick="cancelarEdicion('4A')">Cancelar</button>
+        </div>
+        <table id="tabla_4A">
+            <thead>
+                <tr>
+                    <th style="width: 100px;">Acciones</th>
+                    <th>Alumno</th>
+                    <th>Tutor</th>
+                    <th>Parentesco</th>
+                    <th>ID</th>
+                </tr>
+            </thead>
+            <tbody id="lista_4A"></tbody>
+        </table>
+    </div>
+    <div class="table-container">
+        <div class="table-header">
+            <span class="table-header-title" onclick="toggleTable('tabla_4B')">Grupo 4B</span>
+            <button onclick="habilitarEdicion('4B')">Editar</button>
+            <button id="actualizar_4B" style="display: none;" onclick="actualizarRegistros('4B')">Actualizar</button>
+            <button id="cancelar_4B" class="cancel-btn" style="display: none;" onclick="cancelarEdicion('4B')">Cancelar</button>
+        </div>
+        <table id="tabla_4B">
+            <thead>
+                <tr>
+                    <th style="width: 100px;">Acciones</th>
+                    <th>Alumno</th>
+                    <th>Tutor</th>
+                    <th>Parentesco</th>
+                    <th>ID</th>
+                </tr>
+            </thead>
+            <tbody id="lista_4B"></tbody>
+        </table>
+    </div>
+    <div class="table-container">
+        <div class="table-header">
+            <span class="table-header-title" onclick="toggleTable('tabla_5A')">Grupo 5A</span>
+            <button onclick="habilitarEdicion('5A')">Editar</button>
+            <button id="actualizar_5A" style="display: none;" onclick="actualizarRegistros('5A')">Actualizar</button>
+            <button id="cancelar_5A" class="cancel-btn" style="display: none;" onclick="cancelarEdicion('5A')">Cancelar</button>
+        </div>
+        <table id="tabla_5A">
+            <thead>
+                <tr>
+                    <th style="width: 100px;">Acciones</th>
+                    <th>Alumno</th>
+                    <th>Tutor</th>
+                    <th>Parentesco</th>
+                    <th>ID</th>
+                </tr>
+            </thead>
+            <tbody id="lista_5A"></tbody>
+        </table>
+    </div>
+    <div class="table-container">
+        <div class="table-header">
+            <span class="table-header-title" onclick="toggleTable('tabla_5B')">Grupo 5B</span>
+            <button onclick="habilitarEdicion('5B')">Editar</button>
+            <button id="actualizar_5B" style="display: none;" onclick="actualizarRegistros('5B')">Actualizar</button>
+            <button id="cancelar_5B" class="cancel-btn" style="display: none;" onclick="cancelarEdicion('5B')">Cancelar</button>
+        </div>
+        <table id="tabla_5B">
+            <thead>
+                <tr>
+                    <th style="width: 100px;">Acciones</th>
+                    <th>Alumno</th>
+                    <th>Tutor</th>
+                    <th>Parentesco</th>
+                    <th>ID</th>
+                </tr>
+            </thead>
+            <tbody id="lista_5B"></tbody>
+        </table>
+    </div>
+    <div class="table-container">
+        <div class="table-header">
+            <span class="table-header-title" onclick="toggleTable('tabla_6A')">Grupo 6A</span>
+            <button onclick="habilitarEdicion('6A')">Editar</button>
+            <button id="actualizar_6A" style="display: none;" onclick="actualizarRegistros('6A')">Actualizar</button>
+            <button id="cancelar_6A" class="cancel-btn" style="display: none;" onclick="cancelarEdicion('6A')">Cancelar</button>
+        </div>
+        <table id="tabla_6A">
+            <thead>
+                <tr>
+                    <th style="width: 100px;">Acciones</th>
+                    <th>Alumno</th>
+                    <th>Tutor</th>
+                    <th>Parentesco</th>
+                    <th>ID</th>
+                </tr>
+            </thead>
+            <tbody id="lista_6A"></tbody>
+        </table>
+    </div>
+    <div class="table-container">
+        <div class="table-header">
+            <span class="table-header-title" onclick="toggleTable('tabla_6B')">Grupo 6B</span>
+            <button onclick="habilitarEdicion('6B')">Editar</button>
+            <button id="actualizar_6B" style="display: none;" onclick="actualizarRegistros('6B')">Actualizar</button>
+            <button id="cancelar_6B" class="cancel-btn" style="display: none;" onclick="cancelarEdicion('6B')">Cancelar</button>
+        </div>
+        <table id="tabla_6B">
+            <thead>
+                <tr>
+                    <th style="width: 100px;">Acciones</th>
+                    <th>Alumno</th>
+                    <th>Tutor</th>
+                    <th>Parentesco</th>
+                    <th>ID</th>
+                </tr>
+            </thead>
+            <tbody id="lista_6B"></tbody>
+        </table>
+    </div>
+
+    <script>
+        const grupos = ['1A', '1B', '2A', '2B', '3A', '3B', '4A', '4B', '5A', '5B', '6A', '6B'];
+
+        function generarID(tutor, parentesco, originalId = null) {
+            if (!tutor || !parentesco) {
+                return '';
+            }
+
+            // Generar ID base
+            const palabrasTutor = tutor.split(/\s+/).filter(word => word.length > 0);
+            let idBase = palabrasTutor.map(word => word.substring(0, 2)).join('');
+            idBase += parentesco.charAt(0).toUpperCase();
+
+            // Verificar unicidad, excluyendo el ID original
+            let idFinal = idBase;
+            let contador = 1;
+            while (!esIDUnico(idFinal, originalId)) {
+                idFinal = `${idBase}${contador}`;
+                contador++;
+            }
+
+            return idFinal;
+        }
+
+        function actualizarIDFormulario() {
+            const tutor = document.getElementById('tutor').value.trim();
+            const parentesco = document.getElementById('parentesco').value.trim();
+            const idInput = document.getElementById('id');
+            idInput.value = generarID(tutor, parentesco);
+        }
+
+        function esIDUnico(id, originalId = null) {
+            for (let grupo of grupos) {
+                const registros = JSON.parse(localStorage.getItem(`asistencias_${grupo}`)) || [];
+                if (registros.some(registro => registro.id === id && registro.id !== originalId)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        function registrarAsistencia() {
+            const alumno = document.getElementById('alumno').value.trim();
+            const tutor = document.getElementById('tutor').value.trim();
+            const parentesco = document.getElementById('parentesco').value.trim();
+            const id = document.getElementById('id').value;
+            const grupo = document.getElementById('grupo').value;
+            const errorMessage = document.getElementById('error-message');
+
+            if (!alumno || !tutor || !parentesco || !id) {
+                errorMessage.style.display = 'block';
+                return;
+            }
+
+            errorMessage.style.display = 'none';
+
+            const now = new Date();
+            const hora = now.toLocaleTimeString();
+            const registro = { alumno, tutor, parentesco, id, hora };
+
+            // Guardar en localStorage
+            let registros = JSON.parse(localStorage.getItem(`asistencias_${grupo}`)) || [];
+            registros.push(registro);
+            localStorage.setItem(`asistencias_${grupo}`, JSON.stringify(registros));
+
+            // Agregar a la tabla correspondiente
+            agregarFilaTabla(registro, grupo);
+
+            // Limpiar el formulario
+            document.getElementById('alumno').value = '';
+            document.getElementById('tutor').value = '';
+            document.getElementById('parentesco').value = '';
+            document.getElementById('id').value = '';
+
+            alert('Asistencia registrada correctamente.');
+        }
+
+        function importarCSV() {
+            const fileInput = document.getElementById('csvFile');
+            const grupo = document.getElementById('grupo').value;
+            const csvSuccess = document.getElementById('csv-success');
+            const csvError = document.getElementById('csv-error');
+
+            if (!fileInput.files.length) {
+                csvError.textContent = 'Por favor, selecciona un archivo CSV.';
+                csvError.style.display = 'block';
+                csvSuccess.style.display = 'none';
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                const text = e.target.result;
+                const rows = text.split('\n').map(row => row.trim()).filter(row => row);
+
+                if (rows.length < 1) {
+                    csvError.textContent = 'El archivo CSV está vacío.';
+                    csvError.style.display = 'block';
+                    csvSuccess.style.display = 'none';
+                    return;
+                }
+
+                const headers = rows[0].split(',').map(header => header.trim());
+                const expectedHeaders = ['Alumno', 'Tutor', 'Parentesco'];
+                if (!expectedHeaders.every((header, i) => header === headers[i])) {
+                    csvError.textContent = 'El archivo CSV debe tener los encabezados: Alumno,Tutor,Parentesco';
+                    csvError.style.display = 'block';
+                    csvSuccess.style.display = 'none';
+                    return;
+                }
+
+                let registros = JSON.parse(localStorage.getItem(`asistencias_${grupo}`)) || [];
+                let importados = 0;
+
+                for (let i = 1; i < rows.length; i++) {
+                    const cols = rows[i].split(',').map(col => col.trim());
+                    if (cols.length !== 3) continue;
+
+                    let [alumno, tutor, parentesco] = cols;
+
+                    // Validar datos
+                    if (!alumno || !tutor || !parentesco) continue;
+
+                    // Generar ID único
+                    const id = generarID(tutor, parentesco);
+                    if (!id) continue;
+
+                    const now = new Date();
+                    const hora = now.toLocaleTimeString();
+                    const registro = { alumno, tutor, parentesco, id, hora };
+                    registros.push(registro);
+                    agregarFilaTabla(registro, grupo);
+                    importados++;
+                }
+
+                if (importados > 0) {
+                    localStorage.setItem(`asistencias_${grupo}`, JSON.stringify(registros));
+                    csvSuccess.textContent = `Se importaron ${importados} registros al grupo ${grupo}.`;
+                    csvSuccess.style.display = 'block';
+                    csvError.style.display = 'none';
+                } else {
+                    csvError.textContent = 'No se encontraron registros válidos en el archivo CSV.';
+                    csvError.style.display = 'block';
+                    csvSuccess.style.display = 'none';
+                }
+
+                // Limpiar input de archivo
+                fileInput.value = '';
+            };
+
+            reader.onerror = function() {
+                csvError.textContent = 'Error al leer el archivo CSV.';
+                csvError.style.display = 'block';
+                csvSuccess.style.display = 'none';
+            };
+
+            reader.readAsText(file);
+        }
+
+        function agregarFilaTabla(registro, grupo) {
+            const tbody = document.getElementById(`lista_${grupo}`);
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="action-buttons">
+                    <button class="delete-btn" style="display: none;" onclick="eliminarFila(this, '${grupo}')">✖</button>
+                    <button class="move-btn" style="display: none;" onclick="moverFilaArriba(this, '${grupo}')">↑</button>
+                    <button class="move-btn" style="display: none;" onclick="moverFilaAbajo(this, '${grupo}')">↓</button>
+                </td>
+                <td class="editable" data-field="alumno">${registro.alumno}</td>
+                <td class="editable" data-field="tutor">${registro.tutor}</td>
+                <td class="editable" data-field="parentesco">${registro.parentesco}</td>
+                <td data-field="id">${registro.id}</td>
+            `;
+            tbody.appendChild(tr);
+        }
+
+        function habilitarEdicion(grupo) {
+            const tbody = document.getElementById(`lista_${grupo}`);
+            const actualizarBtn = document.getElementById(`actualizar_${grupo}`);
+            const cancelarBtn = document.getElementById(`cancelar_${grupo}`);
+            const filas = tbody.getElementsByTagName('tr');
+
+            actualizarBtn.style.display = 'inline-block';
+            cancelarBtn.style.display = 'inline-block';
+
+            for (let fila of filas) {
+                // Habilitar botones de acción
+                const actionButtons = fila.querySelectorAll('.action-buttons button');
+                actionButtons.forEach(btn => btn.style.display = 'inline-block');
+
+                // Habilitar edición de celdas
+                const celdas = fila.getElementsByClassName('editable');
+                for (let celda of celdas) {
+                    celda.onclick = function() {
+                        if (celda.querySelector('input')) return;
+                        const valor = celda.textContent;
+                        const campo = celda.dataset.field;
+                        celda.innerHTML = `<input type="text" value="${valor}" data-original="${valor}">`;
+                        const input = celda.querySelector('input');
+                        input.focus();
+                        input.onblur = function() {
+                            const nuevoValor = input.value.trim();
+                            celda.textContent = nuevoValor || valor;
+                            if ((campo === 'tutor' || campo === 'parentesco') && nuevoValor) {
+                                actualizarIDFila(fila, grupo);
+                            }
+                        };
+                        input.onkeypress = function(e) {
+                            if (e.key === 'Enter') {
+                                input.blur();
+                            }
+                        };
+                    };
+                }
+            }
+        }
+
+        function actualizarIDFila(fila, grupo) {
+            const celdas = fila.getElementsByTagName('td');
+            const tutor = celdas[2].textContent;
+            const parentesco = celdas[3].textContent;
+            const originalId = celdas[4].textContent;
+            const nuevoId = generarID(tutor, parentesco, originalId);
+            celdas[4].textContent = nuevoId;
+        }
+
+        function eliminarFila(btn, grupo) {
+            const fila = btn.parentNode.parentNode;
+            fila.remove();
+        }
+
+        function moverFilaArriba(btn, grupo) {
+            const fila = btn.parentNode.parentNode;
+            const tbody = document.getElementById(`lista_${grupo}`);
+            if (fila.previousElementSibling) {
+                tbody.insertBefore(fila, fila.previousElementSibling);
+            }
+        }
+
+        function moverFilaAbajo(btn, grupo) {
+            const fila = btn.parentNode.parentNode;
+            const tbody = document.getElementById(`lista_${grupo}`);
+            if (fila.nextElementSibling) {
+                tbody.insertBefore(fila.nextElementSibling, fila);
+            }
+        }
+
+        function actualizarRegistros(grupo) {
+            const tbody = document.getElementById(`lista_${grupo}`);
+            const actualizarBtn = document.getElementById(`actualizar_${grupo}`);
+            const cancelarBtn = document.getElementById(`cancelar_${grupo}`);
+            const filas = tbody.getElementsByTagName('tr');
+            let registros = [];
+
+            for (let fila of filas) {
+                const celdas = fila.getElementsByTagName('td');
+                const alumno = celdas[1].textContent;
+                const tutor = celdas[2].textContent;
+                const parentesco = celdas[3].textContent;
+                const id = celdas[4].textContent;
+                const hora = (JSON.parse(localStorage.getItem(`asistencias_${grupo}`)) || [])
+                    .find(reg => reg.id === id)?.hora || new Date().toLocaleTimeString();
+                registros.push({ alumno, tutor, parentesco, id, hora });
+            }
+
+            // Guardar en localStorage
+            localStorage.setItem(`asistencias_${grupo}`, JSON.stringify(registros));
+
+            // Deshabilitar edición
+            for (let fila of filas) {
+                const celdas = fila.getElementsByClassName('editable');
+                for (let celda of celdas) {
+                    celda.onclick = null;
+                }
+                const actionButtons = fila.querySelectorAll('.action-buttons button');
+                actionButtons.forEach(btn => btn.style.display = 'none');
+            }
+
+            actualizarBtn.style.display = 'none';
+            cancelarBtn.style.display = 'none';
+            alert(`Registros del grupo ${grupo} actualizados correctamente.`);
+        }
+
+        function cancelarEdicion(grupo) {
+            const tbody = document.getElementById(`lista_${grupo}`);
+            const actualizarBtn = document.getElementById(`actualizar_${grupo}`);
+            const cancelarBtn = document.getElementById(`cancelar_${grupo}`);
+
+            // Restaurar tabla desde localStorage
+            tbody.innerHTML = '';
+            const registros = JSON.parse(localStorage.getItem(`asistencias_${grupo}`)) || [];
+            registros.forEach(registro => agregarFilaTabla(registro, grupo));
+
+            // Deshabilitar edición
+            const filas = tbody.getElementsByTagName('tr');
+            for (let fila of filas) {
+                const celdas = fila.getElementsByClassName('editable');
+                for (let celda of celdas) {
+                    celda.onclick = null;
+                }
+                const actionButtons = fila.querySelectorAll('.action-buttons button');
+                actionButtons.forEach(btn => btn.style.display = 'none');
+            }
+
+            actualizarBtn.style.display = 'none';
+            cancelarBtn.style.display = 'none';
+        }
+
+        function toggleTable(tableId) {
+            const table = document.getElementById(tableId);
+            table.classList.toggle('active');
+        }
+
+        // Cargar registros al iniciar
+        window.onload = function() {
+            grupos.forEach(grupo => {
+                const registros = JSON.parse(localStorage.getItem(`asistencias_${grupo}`)) || [];
+                registros.forEach(registro => agregarFilaTabla(registro, grupo));
+            });
+        };
+    </script>
+</body>
+</html>

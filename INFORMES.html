@@ -1,0 +1,230 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Informes de Asistencia</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .table-container {
+            margin-bottom: 20px;
+        }
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #007bff;
+            color: white;
+            padding: 15px;
+            border-radius: 4px 4px 0 0;
+            font-size: 18px;
+        }
+        .table-header-title {
+            cursor: pointer;
+            flex-grow: 1;
+        }
+        .table-header-title:hover {
+            background-color: #0056b3;
+        }
+        .table-header button {
+            background-color: #ffc107;
+            color: #333;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .table-header button:hover {
+            background-color: #e0a800;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: #fff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            display: none;
+        }
+        table.active {
+            display: table;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #007bff;
+            color: white;
+        }
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+        .no-registros {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+            font-style: italic;
+        }
+        .asistencias-cell {
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+        }
+        .asistencias-title {
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        .fechas-asistencias {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .fecha-asistencia {
+            background-color: #e9ecef;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Informes de Asistencia</h1>
+    <p style="text-align: center; color: #666;">Cargando registros desde REGISTEL.HTML...</p>
+
+    <div id="tables-container"></div>
+
+    <script>
+        const grupos = ['1A', '1B', '2A', '2B', '3A', '3B', '4A', '4B', '5A', '5B', '6A', '6B'];
+        const container = document.getElementById('tables-container');
+
+        function crearTablaGrupo(grupo) {
+            const registros = JSON.parse(localStorage.getItem(`asistencias_${grupo}`)) || [];
+            const tableContainer = document.createElement('div');
+            tableContainer.className = 'table-container';
+            tableContainer.innerHTML = `
+                <div class="table-header">
+                    <span class="table-header-title" onclick="toggleTable('tabla_${grupo}')">Grupo ${grupo}</span>
+                    <span>${registros.length} registros</span>
+                    <button onclick="exportarCSV('${grupo}')">Exportar a CSV</button>
+                </div>
+                <table id="tabla_${grupo}">
+                    <thead>
+                        <tr>
+                            <th style="width: 30%;">Tutor</th>
+                            <th style="width: 30%;">ID</th>
+                            <th style="width: 40%;">Asistencias</th>
+                        </tr>
+                    </thead>
+                    <tbody id="lista_${grupo}">
+                        ${registros.length === 0 ? '<tr><td colspan="3" class="no-registros">Sin registros en este grupo.</td></tr>' : ''}
+                    </tbody>
+                </table>
+            `;
+            container.appendChild(tableContainer);
+
+            if (registros.length > 0) {
+                const tbody = document.getElementById(`lista_${grupo}`);
+                registros.forEach(registro => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${registro.tutor}</td>
+                        <td>${registro.id}</td>
+                        <td class="asistencias-cell">
+                            <div class="asistencias-title">Asistencias</div>
+                            <div class="fechas-asistencias"></div>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+        }
+
+        function toggleTable(tableId) {
+            const table = document.getElementById(tableId);
+            table.classList.toggle('active');
+        }
+
+        function exportarCSV(grupo) {
+            const registros = JSON.parse(localStorage.getItem(`asistencias_${grupo}`)) || [];
+            let csvContent = '"Tutor","ID","Asistencias"\n';
+
+            registros.forEach(registro => {
+                const tutor = `"${registro.tutor.replace(/"/g, '""')}"`;
+                const id = `"${registro.id}"`;
+                const asistencias = registro.asistencias 
+                    ? `"${registro.asistencias.map(a => `${a.estado}:${a.fecha}`).join(',')}"`
+                    : '""';
+                csvContent += `${tutor},${id},${asistencias}\n`;
+            });
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', `Informe_Grupo_${grupo}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+
+        // Cargar todos los grupos al iniciar
+        window.onload = function() {
+            grupos.forEach(grupo => crearTablaGrupo(grupo));
+            document.querySelector('p').style.display = 'none'; // Ocultar mensaje de carga
+        };
+    </script>
+</body>
+</html>
