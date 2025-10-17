@@ -187,11 +187,6 @@
             const hoy = formatDateOnly(new Date());
             grupos.forEach(grupo => {
                 const registros = JSON.parse(localStorage.getItem(`asistencias_${grupo}`)) || [];
-                registros.forEach(registro => {
-                    if (!registro.asistencias) registro.asistencias = [];
-                    if (!registro.asistencias.some(a => a.fecha === hoy)) {
-                        registro.asistencias.push({ fecha: hoy, estado: 'NA' });
-                        localStorage.setItem(`asistencias_${grupo}`, JSON.stringify(registros));
                     }
                 });
             });
