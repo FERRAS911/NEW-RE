@@ -22,7 +22,7 @@ domReady(function () {
         return `${dia}/${mes}/${año} ${horas}:${minutos}`;
     }
 
-    // Register attendance
+    // Register attendance and notify other tabs
     function registrarAsistencia(id) {
         qrResult.textContent = `Escaneando...`;
         let found = false;
@@ -37,6 +37,9 @@ domReady(function () {
                 registro.asistencias.push({ fecha: fechaActual, estado: 'SA' });
                 localStorage.setItem(`asistencias_${grupo}`, JSON.stringify(registros));
                 qrResult.textContent = `Asistencia registrada para ${id} el ${fechaActual}`;
+
+                // Notify other tabs (e.g., INFORMES.HTML) to update
+                window.dispatchEvent(new Event('storage'));
                 break;
             }
         }
@@ -64,4 +67,9 @@ domReady(function () {
         { fps: 10, qrbox: 250 }
     );
     htmlscanner.render(onScanSuccess, onScanError);
+
+    // Listen for storage events to sync with other tabs if needed
+    window.addEventListener('storage', () => {
+        // This will trigger INFORMES.HTML to update if listening
+    });
 });
