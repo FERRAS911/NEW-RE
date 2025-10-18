@@ -38,7 +38,39 @@
         }
         return gk_fileData[filename] || "";
         }
-        </script><!DOCTYPE html>
+        </script><script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+            return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+            if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+                try {
+                    var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                    var firstSheetName = workbook.SheetNames[0];
+                    var worksheet = workbook.Sheets[firstSheetName];
+                    var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                    var filteredData = jsonData.filter(row => row.some(filledCell));
+                    var headerRowIndex = filteredData.findIndex((row, index) =>
+                        row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                    );
+                    if (headerRowIndex === -1 || headerRowIndex > 25) {
+                        headerRowIndex = 0;
+                    }
+                    var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex));
+                    csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                    return csv;
+                } catch (e) {
+                    console.error(e);
+                    return "";
+                }
+            }
+            return gk_fileData[filename] || "";
+        }
+</script>
+<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -65,7 +97,7 @@
             width: 100%;
             height: 100%;
             background: inherit;
-            opacity: 0.25; /* 75% de transparencia */
+            opacity: 0.25;
             z-index: -1;
         }
         h1 {
@@ -75,7 +107,7 @@
             z-index: 1;
         }
         .table-container {
-            background-color: rgba(255, 255, 255, 0.9); /* Fondo blanco semitransparente para legibilidad */
+            background-color: rgba(255, 255, 255, 0.9);
             margin-bottom: 20px;
             border-radius: 8px;
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
@@ -141,26 +173,6 @@
             color: #666;
             font-style: italic;
         }
-        .asistencias-cell {
-            display: flex;
-            flex-direction: column;
-            justify-content: flex-start;
-        }
-        .asistencias-title {
-            font-weight: bold;
-            margin-bottom: 8px;
-        }
-        .fechas-asistencias {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-        .fecha-asistencia {
-            background-color: #e9ecef;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-        }
     </style>
 </head>
 <body>
@@ -170,7 +182,6 @@
     <div id="tables-container"></div>
 
     <script>
-        // Formatear fecha a dd/mmm/aa
         function formatDateOnly(date) {
             const meses = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
             const dia = String(date.getDate()).padStart(2, '0');
@@ -182,13 +193,45 @@
         const grupos = ['1A', '1B', '2A', '2B', '3A', '3B', '4A', '4B', '5A', '5B', '6A', '6B'];
         const container = document.getElementById('tables-container');
 
-                    }
-                });
+        // Sample function to restrict one scan per day (to be integrated into QR scanning logic)
+        function restrictOneScanPerDay(grupo, studentId, fecha) {
+            const registros = JSON.parse(localStorage.getItem(`asistencias_${grupo}`)) || [];
+            const student = registros.find(r => r.id === studentId);
+            if (student && student.asistencias) {
+                return !student.asistencias.some(a => a.fecha === fecha && a.estado === 'SA');
+            }
+            return true; // Allow scan if no record exists
+        }
+
+        function getUniqueDates(registros) {
+            const dates = new Set();
+            registros.forEach(registro => {
+                if (registro.asistencias) {
+                    registro.asistencias.forEach(a => {
+                        if (a.estado === 'SA' && a.fecha) {
+                            const [day, month] = a.fecha.split('/');
+                            dates.add(`${day}/${month}`);
+                        }
+                    });
+                }
+            });
+            return Array.from(dates).sort((a, b) => {
+                const fullDateA = registros
+                    .flatMap(r => r.asistencias || [])
+                    .find(a => a.fecha.startsWith(a) && a.estado === 'SA')?.fecha;
+                const fullDateB = registros
+                    .flatMap(r => r.asistencias || [])
+                    .find(a => a.fecha.startsWith(b) && a.estado === 'SA')?.fecha;
+                if (!fullDateA || !fullDateB) return 0;
+                const dateA = new Date(fullDateA.split('/').reverse().join('-'));
+                const dateB = new Date(fullDateB.split('/').reverse().join('-'));
+                return dateA - dateB;
             });
         }
 
         function crearTablaGrupo(grupo) {
             const registros = JSON.parse(localStorage.getItem(`asistencias_${grupo}`)) || [];
+            const uniqueDates = getUniqueDates(registros);
             const tableContainer = document.createElement('div');
             tableContainer.className = 'table-container';
             tableContainer.innerHTML = `
@@ -202,11 +245,11 @@
                         <tr>
                             <th style="width: 30%;">Tutor</th>
                             <th style="width: 30%;">ID</th>
-                            <th style="width: 40%;">Asistencias</th>
+                            ${uniqueDates.map(date => `<th style="width: ${40 / (uniqueDates.length || 1)}%;">${date}</th>`).join('')}
                         </tr>
                     </thead>
                     <tbody id="lista_${grupo}">
-                        ${registros.length === 0 ? '<tr><td colspan="3" class="no-registros">Sin registros en este grupo.</td></tr>' : ''}
+                        ${registros.length === 0 ? `<tr><td colspan="${2 + uniqueDates.length}" class="no-registros">Sin registros en este grupo.</td></tr>` : ''}
                     </tbody>
                 </table>
             `;
@@ -216,16 +259,14 @@
                 const tbody = document.getElementById(`lista_${grupo}`);
                 registros.forEach(registro => {
                     const tr = document.createElement('tr');
-                    const asistenciasHTML = registro.asistencias && registro.asistencias.length > 0
-                        ? registro.asistencias.map(a => `<span class="fecha-asistencia">${a.estado}:${a.fecha}</span>`).join('')
-                        : '';
+                    const attendanceCells = uniqueDates.map(displayDate => {
+                        const attendance = registro.asistencias?.find(a => a.fecha.startsWith(displayDate) && a.estado === 'SA');
+                        return `<td>${attendance ? 'SA' : ''}</td>`;
+                    }).join('');
                     tr.innerHTML = `
                         <td>${registro.tutor}</td>
                         <td>${registro.id}</td>
-                        <td class="asistencias-cell">
-                            <div class="asistencias-title">Asistencias</div>
-                            <div class="fechas-asistencias">${asistenciasHTML}</div>
-                        </td>
+                        ${attendanceCells}
                     `;
                     tbody.appendChild(tr);
                 });
@@ -239,15 +280,17 @@
 
         function exportarCSV(grupo) {
             const registros = JSON.parse(localStorage.getItem(`asistencias_${grupo}`)) || [];
-            let csvContent = '"Tutor","ID","Asistencias"\n';
+            const uniqueDates = getUniqueDates(registros);
+            let csvContent = '"Tutor","ID",' + uniqueDates.map(date => `"${date}"`).join(',') + '\n';
 
             registros.forEach(registro => {
                 const tutor = `"${registro.tutor.replace(/"/g, '""')}"`;
                 const id = `"${registro.id}"`;
-                const asistencias = registro.asistencias
-                    ? `"${registro.asistencias.map(a => `${a.estado}:${a.fecha}`).join(',')}"`
-                    : '""';
-                csvContent += `${tutor},${id},${asistencias}\n`;
+                const attendance = uniqueDates.map(displayDate => {
+                    const found = registro.asistencias?.find(a => a.fecha.startsWith(displayDate) && a.estado === 'SA');
+                    return found ? '"SA"' : '""';
+                }).join(',');
+                csvContent += `${tutor},${id},${attendance}\n`;
             });
 
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -261,11 +304,9 @@
             URL.revokeObjectURL(url);
         }
 
-        // Cargar y verificar asistencias al iniciar
         window.onload = function() {
-            verificarAsistenciasDiaActual();
             grupos.forEach(grupo => crearTablaGrupo(grupo));
-            document.querySelector('p').style.display = 'none'; // Ocultar mensaje de carga
+            document.querySelector('p').style.display = 'none';
         };
     </script>
 </body>
