@@ -1,2 +1,0 @@
-# TUTORES
-Registro de tutores
